@@ -309,7 +309,7 @@ def mesh_building(ns, limits, tensor=True, for_input_function=True):
 #-----------------------------------------------------------------------------------------
 def training_loop(model, optimizer, mse_loss, train_tensor_xb, train_tensor_yb, 
                   sampled_collocation_points, sampled_exact_solutions, 
-                  c, num_epochs, lambda1, lambda2, lambda3, lambda4, losses, losses_0, losses_xb, losses_yb, losses_I, epochs, LR_scheduler=None):
+                  c, num_epochs, lambda1, lambda2, lambda3, lambda4, losses, losses_0, losses_xb, losses_yb, losses_I, epochs):
     for epoch in range(num_epochs):
         model.train()
         model.zero_grad()
@@ -340,72 +340,10 @@ def training_loop(model, optimizer, mse_loss, train_tensor_xb, train_tensor_yb,
         losses_yb.append(loss_yb.item())
         losses_I.append(loss_I.item())
 
-        if LR_scheduler is not None:
-            LR_scheduler.step(loss.item())
-
         if (epoch+1) % (num_epochs/10) == 0:
             print(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {loss.item():.6f}")
 
     return losses, losses_0, losses_xb, losses_yb, losses_I, epochs, model
-
-def validation_training_loop(model, optimizer, mse_loss, train_tensor_xb, train_tensor_yb,
-                  sampled_collocation_points, sampled_exact_solutions, 
-                  c, num_epochs_thresh, val_loss_thresh, lambda1, lambda2, lambda3, lambda4,
-                  losses, losses_0, losses_xb, losses_yb, losses_I, epochs,
-                  test_tensor_xb, test_tensor_yb, val_collocation_points, val_exact_solutions, Vlosses, LR_scheduler=None):
-    # Training loop
-    Vloss = 1e10
-    epoch = 0
-    while Vloss > val_loss_thresh and epoch < num_epochs_thresh:
-        model.train()
-        model.zero_grad()
-
-        G_initial = model(train_tensor_xb, train_tensor_yb, sampled_collocation_points["initial"])
-        G_xboundary = model(train_tensor_xb, train_tensor_yb, sampled_collocation_points["xboundary"])
-        G_yboundary = model(train_tensor_xb, train_tensor_yb, sampled_collocation_points["yboundary"])
-        G_internal = model(train_tensor_xb, train_tensor_yb, sampled_collocation_points["internal"])
-
-        loss_0 = loss_initial(G_initial, sampled_exact_solutions["initial"], mse_loss)
-        loss_xb = loss_boundary(G_xboundary, sampled_exact_solutions["xboundary"], mse_loss)
-        loss_yb = loss_boundary(G_yboundary, sampled_exact_solutions["yboundary"], mse_loss)
-        loss_I = loss_PDE(G_internal, sampled_collocation_points["internal"], c, mse_loss)
-        loss = lambda1*loss_0 + lambda2*loss_xb + lambda3*loss_yb + lambda4*loss_I
-        
-        V_initial = model(test_tensor_xb, test_tensor_yb, val_collocation_points["initial"])
-        V_xboundary = model(test_tensor_xb, test_tensor_yb, val_collocation_points["xboundary"])
-        V_yboundary = model(test_tensor_xb, test_tensor_yb, val_collocation_points["yboundary"])
-        V_internal = model(test_tensor_xb, test_tensor_yb, val_collocation_points["internal"])
-
-        Vloss_0 = loss_initial(V_initial, val_exact_solutions["initial"], mse_loss)
-        Vloss_xb = loss_boundary(V_xboundary, val_exact_solutions["xboundary"], mse_loss)
-        Vloss_yb = loss_boundary(V_yboundary, val_exact_solutions["yboundary"], mse_loss)
-        Vloss_I = loss_PDE(V_internal, val_collocation_points["internal"], c, mse_loss)
-        Vloss = lambda1*Vloss_0 + lambda2*Vloss_xb + lambda3*Vloss_yb + lambda4*Vloss_I
-
-        # backward pass.
-        loss.backward()
-
-        # update weights.
-        optimizer.step()
-
-        # Save epoch and loss
-        epochs.append(epoch + 1)
-        losses.append(loss.item())
-        losses_0.append(loss_0.item())
-        losses_xb.append(loss_xb.item())
-        losses_yb.append(loss_yb.item())
-        losses_I.append(loss_I.item())
-        Vlosses.append(Vloss.item())
-
-        if LR_scheduler is not None:
-            LR_scheduler.step(loss.item())
-
-        if (epoch+1) % (num_epochs_thresh.item()/100) == 0:
-            print(f'epoch: {epoch+1}, loss = {loss.item():.6f}, Validation loss = {Vloss.item():.6f}')
-        
-        epoch += 1
-
-    return losses, losses_0, losses_xb, losses_yb, losses_I, Vlosses, epochs, model, epoch+1
 
 #-----------------------------------------------------------------------------------------
 # Function to save_data
